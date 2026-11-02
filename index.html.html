@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversor a pesos argentinos</title>
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--text:#1d1d1b;--muted:#6b6a64;--line:#dedcd4;--out:#e8f1ff;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--card:#212120;--text:#f1f0ea;--muted:#a09f97;--line:#3a3a37;--out:#1b2a40}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;justify-content:center;padding:20px 14px}
+.app{width:100%;max-width:420px}
+h1{font-size:20px;margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+input,select,button{width:100%;box-sizing:border-box;font-size:18px;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+button{font-size:15px;cursor:pointer;margin-top:10px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.out{background:var(--out);text-align:center}
+.out small{color:var(--muted);font-size:13px}
+.out strong{display:block;font-size:34px;margin-top:4px;word-break:break-word}
+.hint{font-size:12px;color:var(--muted);margin:8px 0 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Conversor a pesos argentinos</h1>
+
+  <div class="card">
+    <div class="row">
+      <div style="flex:2"><label for="amt">Precio del producto</label>
+        <input id="amt" type="number" inputmode="decimal" placeholder="0" autofocus></div>
+      <div><label for="cur">Moneda</label>
+        <select id="cur"><option value="CLP">CLP</option><option value="USD">USD</option></select></div>
+    </div>
+  </div>
+
+  <div class="card out"><small id="lbl">Equivale a</small><strong id="res">$ 0,00</strong></div>
+
+  <div class="card">
+    <label for="tipo">Qué dólar usar</label>
+    <select id="tipo">
+      <option value="oficial">Oficial</option>
+      <option value="bolsa">MEP</option>
+      <option value="blue">Blue</option>
+      <option value="tarjeta">Tarjeta</option>
+      <option value="mayorista">Mayorista</option>
+    </select>
+    <div class="row" style="margin-top:12px">
+      <div><label for="usd">1 USD = ARS</label><input id="usd" type="number" inputmode="decimal"></div>
+      <div><label for="clp">1 USD = CLP</label><input id="clp" type="number" inputmode="decimal"></div>
+    </div>
+    <button id="upd">Actualizar cotizaciones</button>
+    <p class="hint" id="status"></p>
+    <p class="hint" id="clpars"></p>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>n.toLocaleString("es-AR",{maximumFractionDigits:2,minimumFractionDigits:2});
+let dolares=[];
+
+function calc(){
+  const a=parseFloat($("amt").value)||0,usd=parseFloat($("usd").value)||0,clp=parseFloat($("clp").value)||0;
+  const perClp=clp?usd/clp:0;
+  const ars=$("cur").value==="USD"?a*usd:a*perClp;
+  $("res").textContent="$ "+fmt(ars);
+  $("lbl").textContent=fmt(a)+" "+$("cur").value+" equivale a";
+  $("clpars").textContent="1 CLP = "+perClp.toLocaleString("es-AR",{maximumFractionDigits:4})+" ARS";
+}
+function applyTipo(){
+  const d=dolares.find(x=>x.casa===$("tipo").value);
+  if(d){$("usd").value=d.venta;calc();}
+}
+async function update(){
+  $("status").textContent="Actualizando…";
+  try{
+    const [r1,r2]=await Promise.all([
+      fetch("https://dolarapi.com/v1/dolares"),
+      fetch("https://open.er-api.com/v6/latest/USD")
+    ]);
+    dolares=await r1.json();
+    const fx=await r2.json();
+    $("clp").value=Math.round(fx.rates.CLP*100)/100;
+    applyTipo();
+    const hora=new Date().toLocaleString("es-AR");
+    $("status").textContent="Actualizado: "+hora+" (se usa el precio de venta).";
+    try{localStorage.setItem("fx",JSON.stringify({dolares,clp:$("clp").value,hora}))}catch(e){}
+  }catch(e){
+    $("status").textContent="No se pudo actualizar. Podés cargar las cotizaciones a mano.";
+  }
+  calc();
+}
+try{
+  const s=JSON.parse(localStorage.getItem("fx")||"null");
+  if(s){dolares=s.dolares;$("clp").value=s.clp;applyTipo();$("status").textContent="Última actualización guardada: "+s.hora}
+}catch(e){}
+["amt","cur","usd","clp"].forEach(i=>$(i).addEventListener("input",calc));
+$("tipo").addEventListener("change",applyTipo);
+$("upd").addEventListener("click",update);
+update();
+</script>
+</body>
+</html>
